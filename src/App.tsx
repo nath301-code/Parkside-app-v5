@@ -1,9 +1,9 @@
 // @ts-nocheck
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Camera, Home, Calendar, MessageSquare, User, Shield, Heart, X, RefreshCw, Lock, LogOut, 
   Clock, Plus, Users, Edit3, Trash2, Briefcase, Wrench, Receipt, CheckCircle, Leaf, Phone, 
-  PhoneCall, Moon, CalendarDays, ArrowRightCircle, UserPlus, UserX, Key, Eye
+  PhoneCall, Moon, Sun, CalendarDays, ArrowRight, UserPlus, UserX, Key, Eye, ChevronRight, MapPin, Smile, Send
 } from 'lucide-react';
 import { initializeApp } from "firebase/app";
 import { 
@@ -11,10 +11,10 @@ import {
 } from "firebase/auth";
 import { 
   getFirestore, collection, addDoc, query, onSnapshot, orderBy, serverTimestamp, doc, updateDoc, 
-  arrayUnion, deleteDoc, where, writeBatch, getDocs
+  deleteDoc, where, writeBatch, getDocs, arrayUnion
 } from "firebase/firestore";
 
-// --- YOUR FIREBASE CONFIGURATION ---
+// --- FIREBASE CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyANLKKf0OeSTs7_ok6fzIjtxVLWT_mdTnQ",
   authDomain: "parkside-d5885.firebaseapp.com",
@@ -31,618 +31,671 @@ const db = getFirestore(app);
 const appId = firebaseConfig.projectId;
 
 // --- UTILS ---
-const formatTime = (timestamp) => {
-  if (!timestamp) return '';
-  if (typeof timestamp === 'string') return timestamp;
-  const date = timestamp.toDate();
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-};
-
-const formatDate = (timestamp) => {
-  if (!timestamp) return '';
-  const date = timestamp.toDate();
-  return date.toLocaleDateString([], { day: 'numeric', month: 'short' });
-};
-
 const getTodayString = () => new Date().toISOString().split('T')[0];
+const addDays = (d, n) => { const date = new Date(d); date.setDate(date.getDate() + n); return date.toISOString().split('T')[0]; };
+// SAFETY CHECK: Helper to get a safe name even if profile hasn't loaded
+const getSafeName = (user) => user?.displayName || "Staff Member";
 
-const addDays = (dateString, days) => {
-  const date = new Date(dateString);
-  date.setDate(date.getDate() + days);
-  return date.toISOString().split('T')[0];
-};
+// --- STYLES ---
+const styles = {
+  app: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif', backgroundColor: '#F5F5F4', minHeight: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+  header: { padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: 'rgba(245, 245, 244, 0.95)', backdropFilter: 'blur(10px)', position: 'sticky', top: 0, zIndex: 50, borderBottom: '1px solid rgba(0,0,0,0.05)' },
+  main: { flex: 1, overflowY: 'auto', padding: '0 24px 120px 24px' },
+  
+  // Cards
+  card: { backgroundColor: 'white', borderRadius: '24px', padding: '24px', marginBottom: '16px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.03)', position: 'relative', overflow: 'hidden' },
+  heroCard: { background: 'linear-gradient(145deg, #15803d 0%, #166534 100%)', borderRadius: '32px', padding: '32px', color: 'white', marginBottom: '24px', boxShadow: '0 20px 40px -12px rgba(22, 101, 52, 0.3)', position: 'relative', overflow: 'hidden' },
 
-// --- BRANDING ---
-const ParksideLogo = ({ size = "large", showText = true }) => {
-  const isLarge = size === "large";
-  const brownColor = "text-[#8B5E3C]"; 
-  const greenColor = "text-[#65A30D]";
-  return (
-    <div className={`flex ${isLarge ? 'flex-col' : 'flex-row'} items-center justify-center gap-2`}>
-      <div className="relative flex items-center justify-center">
-        <Leaf className={`absolute -top-3 -left-3 ${greenColor} ${isLarge ? 'w-6 h-6' : 'w-3 h-3'} rotate-[-45deg]`} fill="currentColor" />
-        <Leaf className={`absolute -top-5 left-0 ${greenColor} ${isLarge ? 'w-5 h-5' : 'w-2.5 h-2.5'}`} fill="currentColor" />
-        <Leaf className={`absolute -top-3 -right-3 ${greenColor} ${isLarge ? 'w-6 h-6' : 'w-3 h-3'} rotate-[45deg]`} fill="currentColor" />
-        <div className={`relative z-10 border-2 border-[#8B5E3C] ${isLarge ? 'w-12 h-12 border-4' : 'w-6 h-6 border-2'} rounded-lg flex items-center justify-center bg-white`}>
-           <div className={`grid grid-cols-2 gap-[1px] ${isLarge ? 'w-4 h-4' : 'w-2 h-2'} bg-[#8B5E3C]`}><div className="bg-white"></div><div className="bg-white"></div><div className="bg-white"></div><div className="bg-white"></div></div>
-        </div>
-         <div className={`absolute ${isLarge ? '-bottom-4 w-4 h-4' : '-bottom-2 w-2 h-2'} bg-[#8B5E3C]`}></div>
-      </div>
-      {showText && <span className={`${isLarge ? 'text-4xl mt-4' : 'text-xl'} font-bold ${brownColor}`} style={{ fontFamily: '"Brush Script MT", cursive' }}>Parkside</span>}
-    </div>
-  );
+  // Inputs & Buttons
+  input: { width: '100%', padding: '18px', borderRadius: '18px', backgroundColor: '#f5f5f4', border: '2px solid transparent', fontSize: '16px', fontWeight: '600', outline: 'none', marginBottom: '12px', transition: '0.2s' },
+  select: { width: '100%', padding: '18px', borderRadius: '18px', backgroundColor: 'white', border: '1px solid #e5e5e5', fontSize: '16px', marginBottom: '12px', outline: 'none' },
+  btn: { width: '100%', padding: '18px', borderRadius: '18px', border: 'none', fontSize: '16px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', transition: '0.2s', activeScale: 0.95 },
+  btnPrimary: { backgroundColor: '#1c1917', color: 'white', boxShadow: '0 10px 25px rgba(0,0,0,0.15)' },
+  btnSecondary: { backgroundColor: 'white', border: '1px solid #e5e5e5', color: '#1c1917' },
+  fab: { position: 'fixed', bottom: '100px', right: '24px', width: '64px', height: '64px', borderRadius: '32px', backgroundColor: '#16a34a', color: 'white', border: 'none', boxShadow: '0 8px 24px rgba(22, 163, 74, 0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 40, cursor: 'pointer', transition: 'transform 0.2s' },
+
+  // Nav
+  dockContainer: { position: 'absolute', bottom: '32px', left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 100, pointerEvents: 'none' },
+  dock: { backgroundColor: '#1c1917', padding: '6px', borderRadius: '28px', display: 'flex', gap: '6px', boxShadow: '0 20px 40px rgba(0,0,0,0.25)', pointerEvents: 'auto', border: '1px solid rgba(255,255,255,0.1)' },
+  dockBtn: { width: '56px', height: '56px', borderRadius: '22px', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'transparent', color: '#78716c', transition: 'all 0.2s ease' },
+  dockBtnActive: { backgroundColor: '#65A30D', color: 'white', transform: 'translateY(-6px)', boxShadow: '0 8px 16px -4px rgba(101, 163, 13, 0.4)' },
+  
+  // Tab Styling
+  tabContainer: { display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '16px', scrollbarWidth: 'none' },
+  tabBtn: { padding: '12px 20px', borderRadius: '30px', fontSize: '14px', fontWeight: '700', border: 'none', whiteSpace: 'nowrap', transition: '0.2s' },
+  tabActive: { backgroundColor: '#1c1917', color: 'white', boxShadow: '0 8px 20px rgba(0,0,0,0.15)' },
+  tabInactive: { backgroundColor: 'white', color: '#78716c', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' },
+
+  // Login
+  loginPage: { position: 'fixed', inset: 0, zIndex: 999, background: '#f5f5f4', display: 'flex', flexDirection: 'column', justifyContent: 'center', padding: '30px' },
+  loginInput: { width: '100%', padding: '20px', borderRadius: '20px', backgroundColor: 'white', border: '1px solid #e5e5e5', color: '#1c1917', fontSize: '16px', fontWeight: '600', outline: 'none', marginBottom: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.02)' },
+  
+  // Typography
+  h1: { fontSize: '36px', fontWeight: '800', color: '#1c1917', letterSpacing: '-1px' },
+  h2: { fontSize: '24px', fontWeight: '800', marginBottom: '24px' },
+  label: { fontSize: '11px', fontWeight: '800', color: '#a8a29e', textTransform: 'uppercase', marginBottom: '8px', display: 'block', marginLeft: '4px' }
 };
 
 // --- COMPONENTS ---
+
+const ParksideLogo = () => (
+  <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+    <div style={{width: '44px', height: '44px', borderRadius: '14px', background: 'linear-gradient(135deg, #65a30d 0%, #4d7c0f 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 8px 20px -6px rgba(101, 163, 13, 0.4)'}}>
+      <Leaf color="white" size={24} strokeWidth={2.5} />
+    </div>
+    <div>
+      <div style={{fontSize: '22px', fontWeight: '800', color: '#1c1917', lineHeight: 1, letterSpacing: '-0.5px'}}>Parkside</div>
+      <div style={{fontSize: '11px', fontWeight: '700', color: '#65a30d', textTransform: 'uppercase', letterSpacing: '1.5px', marginTop: '2px'}}>Residential</div>
+    </div>
+  </div>
+);
+
+// BOTTOM NAV
+const BottomNav = ({ active, onChange }) => (
+  <div style={styles.dockContainer}>
+     <div style={styles.dock}>
+        {[
+          {id:'dashboard', icon:Home},
+          {id:'calendar', icon:Calendar},
+          {id:'house', icon:Wrench},
+          {id:'feed', icon:MessageSquare}
+        ].map(item => (
+          <button key={item.id} onClick={()=>onChange(item.id)} style={active===item.id ? styles.dockBtnActive : styles.dockBtn} className="dock-btn">
+             <item.icon size={24} strokeWidth={active===item.id ? 2.5 : 2} />
+          </button>
+        ))}
+     </div>
+  </div>
+);
+
 
 // 1. LOGIN SCREEN
 const LoginScreen = ({ onLogin, firebaseUser }) => {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [isResetting, setIsResetting] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
+  const [isReset, setIsReset] = useState(false);
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    if (!name.trim() || (!isResetting && !password.trim()) || (isResetting && !newPassword.trim())) return;
     setLoading(true);
-    setError('');
-
     try {
       const usersRef = collection(db, 'artifacts', appId, 'public', 'data', 'parkside_users');
       const snapshot = await getDocs(usersRef);
-      
-      let existingUserDoc = null;
-      if (!snapshot.empty) {
-        existingUserDoc = snapshot.docs.find(d => d.data().name.toLowerCase() === name.trim().toLowerCase());
-      }
+      let user = snapshot.docs.find(d => d.data().name.toLowerCase() === name.trim().toLowerCase());
 
-      if (isResetting && existingUserDoc) {
-         await updateDoc(existingUserDoc.ref, { password: newPassword.trim() });
-         await updateProfile(firebaseUser, { displayName: name });
-         onLogin(existingUserDoc.data().role);
-         setLoading(false);
-         return;
-      }
+      if (name.toLowerCase() === 'nathan' && password === 'reset-admin') { setIsReset(true); setLoading(false); return; }
+      if (isReset && user) { await updateDoc(user.ref, { password }); onLogin(user.data().role); return; }
 
       let role = 'staff';
-      let shouldCreate = false;
-
-      if (name.trim().toLowerCase() === 'nathan' && password === 'reset-admin') {
-          setIsResetting(true);
-          setLoading(false);
-          return;
-      }
-
-      if (snapshot.empty && name.trim().toLowerCase() === 'nathan') {
-        shouldCreate = true;
-        role = 'manager';
-      } else if (existingUserDoc) {
-        const userData = existingUserDoc.data();
-        if (userData.password === password) {
-          role = userData.role;
-        } else {
-          setError('Incorrect password.');
-          setLoading(false);
-          return;
-        }
-      } else {
-        setError('Account not found.');
-        setLoading(false);
-        return;
-      }
+      let create = false;
+      if (snapshot.empty && name.toLowerCase() === 'nathan') { role = 'manager'; create = true; }
+      else if (user && user.data().password === password) { role = user.data().role; }
+      else throw new Error();
 
       if (firebaseUser) {
-        await updateProfile(firebaseUser, { displayName: name });
-        if (shouldCreate) {
-          await addDoc(usersRef, { name: 'Nathan', role: 'manager', password: password, createdAt: serverTimestamp() });
-        }
-        onLogin(role);
+         await updateProfile(firebaseUser, { displayName: name });
+         if (create) await addDoc(usersRef, { name: 'Nathan', role: 'manager', password, createdAt: serverTimestamp() });
+         onLogin(role);
       }
-    } catch (err) {
-      console.error(err);
-      setError('Connection error.');
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { alert("Invalid Login"); setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden border border-slate-100">
-        <div className="bg-white p-10 text-center border-b border-slate-50">
-          <ParksideLogo size="large" />
-          <p className="text-slate-400 mt-2 text-sm font-medium tracking-wide uppercase">Secure Staff Portal</p>
+    <div style={styles.loginPage}>
+      <div style={{marginBottom: '48px', textAlign: 'center'}}>
+        <div style={{width: '88px', height: '88px', backgroundColor: '#65A30D', borderRadius: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px auto', boxShadow: '0 20px 40px -10px rgba(101,163,13,0.3)'}}>
+           <Leaf color="white" size={44} strokeWidth={2} />
         </div>
-        <form onSubmit={handleLogin} className="p-8 space-y-6 bg-slate-50/50">
-          {error && <div className="bg-red-100 border border-red-200 text-red-700 p-3 rounded-lg text-sm font-bold text-center flex items-center justify-center gap-2"><Lock size={14}/> {error}</div>}
-          {isResetting && <div className="bg-orange-100 border border-orange-200 text-orange-800 p-3 rounded-lg text-sm font-bold text-center">Reset Mode: Please set your new password.</div>}
+        <h1 style={{fontSize: '42px', fontWeight: '900', color: '#1c1917', letterSpacing: '-1.5px', lineHeight: 1}}>Welcome<br/>Back.</h1>
+        <p style={{color: '#78716c', marginTop: '12px', fontSize: '17px', fontWeight: '500'}}>Sign in to Parkside Staff Portal</p>
+      </div>
+      <form onSubmit={handleLogin}>
+         <div style={{marginBottom:'12px'}}>
+            <label style={styles.label}>Username</label>
+            <input style={styles.loginInput} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Nathan" />
+         </div>
+         <div style={{marginBottom:'32px'}}>
+            <label style={styles.label}>{isReset ? 'New Password' : 'Password'}</label>
+            <input style={styles.loginInput} type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••" />
+         </div>
+         <button style={{...styles.btn, ...styles.btnPrimary}} disabled={loading}>
+            {loading ? 'Verifying...' : isReset ? 'Update Password' : 'Sign In'} <ArrowRight size={20} />
+         </button>
+      </form>
+    </div>
+  );
+};
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Username</label>
-              <div className="relative">
-                <User className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                <input type="text" value={name} onChange={(e) => setName(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#65A30D] outline-none bg-white" placeholder="e.g. Nathan" required disabled={isResetting} />
-              </div>
-            </div>
-            
-            {!isResetting ? (
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Password</label>
-                <div className="relative">
-                  <Key className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#65A30D] outline-none bg-white" placeholder="•••••••" required />
-                </div>
-              </div>
-            ) : (
-               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">New Password</label>
-                <div className="relative">
-                  <Key className="absolute left-3 top-3.5 text-slate-400" size={20} />
-                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-[#65A30D] outline-none bg-white" placeholder="New Secure Password" required />
-                </div>
-              </div>
-            )}
+// 2. DASHBOARD
+const Dashboard = ({ user, onNavigate }) => {
+  const [oc, setOc] = useState(null);
+  const [next, setNext] = useState(null);
+  const userName = getSafeName(user); // Use safe name
+
+  useEffect(() => {
+    const u1 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_oncall'), where('date','==',getTodayString())), s=>setOc(s.empty?null:s.docs[0].data()));
+    const u2 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'), where('date','>=',getTodayString()), orderBy('date')), s=>{
+        // Safe check for name existence
+        const n = s.docs.map(d=>d.data()).find(sh => sh.staff && sh.staff.some(st => st.name && st.name.toLowerCase() === userName.toLowerCase()));
+        setNext(n);
+    });
+    return () => { u1(); u2(); };
+  }, [user, userName]);
+
+  return (
+    <div style={styles.main}>
+       <div style={{ marginBottom: '32px', marginTop: '12px' }}>
+          <p style={{color: '#a8a29e', fontWeight: '700', fontSize: '13px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px'}}>Good Afternoon,</p>
+          <h1 style={styles.h1}>{userName.split(' ')[0]}</h1>
+       </div>
+
+       {/* HERO CARD */}
+       <div style={styles.heroCard}>
+          <div style={{position: 'absolute', top: '-20px', right: '-20px', width: '180px', height: '180px', background: 'white', opacity: 0.08, borderRadius: '50%', filter: 'blur(40px)'}}></div>
+          
+          <div style={{display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px'}}>
+             <div style={{width: '8px', height: '8px', backgroundColor: '#4ade80', borderRadius: '50%', boxShadow: '0 0 12px #4ade80'}}></div>
+             <span style={{fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8}}>On Call Manager</span>
           </div>
 
-          <button type="submit" disabled={loading} className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-transform active:scale-[0.98] shadow-lg flex items-center justify-center gap-2 ${isResetting ? 'bg-orange-500 hover:bg-orange-600' : 'bg-[#65A30D] hover:bg-[#4d7c0a]'}`}>
-            {loading ? <RefreshCw className="animate-spin" /> : (isResetting ? 'Update Password' : 'Login')}
-          </button>
-        </form>
-      </div>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end'}}>
+             <div>
+                <div style={{fontSize: '32px', fontWeight: '800', marginBottom: '4px', lineHeight: 1}}>{oc ? oc.name : 'No Data'}</div>
+                <div style={{fontSize: '14px', opacity: 0.6, fontWeight: '500'}}>Until 09:00 Tomorrow</div>
+             </div>
+             {oc && <a href={`tel:${oc.number}`} style={{width: '56px', height: '56px', backgroundColor: 'white', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#15803d', boxShadow: '0 10px 25px rgba(0,0,0,0.15)'}}><PhoneCall size={24}/></a>}
+          </div>
+       </div>
+
+       {/* GRID */}
+       <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'}}>
+          <div style={{...styles.card, gridColumn: 'span 2', backgroundColor: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'space-between'}}>
+             <div>
+                <div style={{fontSize: '11px', fontWeight: '800', color: '#a8a29e', textTransform: 'uppercase', marginBottom: '8px', display:'flex', alignItems:'center', gap:'6px'}}><CalendarDays size={14}/> Next Shift</div>
+                {next ? (
+                   <div>
+                      <div style={{fontSize: '24px', fontWeight: '800', color: '#1c1917'}}>{new Date(next.date).toLocaleDateString('en-GB', {weekday:'short', day:'numeric'})}</div>
+                      <div style={{fontSize: '14px', color: '#15803d', fontWeight: '700', marginTop: '4px'}}>08:00 Start • 48hr Block</div>
+                   </div>
+                ) : <div style={{fontSize: '18px', fontWeight: '700', color: '#d6d3d1'}}>No upcoming shifts</div>}
+             </div>
+             <div style={{width: '48px', height: '48px', borderRadius: '16px', backgroundColor: '#f5f5f4', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#78716c'}}>
+                <ArrowRight size={20}/>
+             </div>
+          </div>
+
+          <div onClick={()=>onNavigate('calendar')} style={{...styles.card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '32px'}}>
+             <div style={{color: '#f97316', padding: '12px', backgroundColor: '#fff7ed', borderRadius: '16px'}}><Calendar size={28}/></div>
+             <span style={{fontWeight: '700', color: '#44403c', fontSize: '15px'}}>Rota</span>
+          </div>
+          <div onClick={()=>onNavigate('house')} style={{...styles.card, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', padding: '32px'}}>
+             <div style={{color: '#3b82f6', padding: '12px', backgroundColor: '#eff6ff', borderRadius: '16px'}}><Wrench size={28}/></div>
+             <span style={{fontWeight: '700', color: '#44403c', fontSize: '15px'}}>House</span>
+          </div>
+       </div>
     </div>
   );
 };
 
-// 2. IN-APP CAMERA
-const SecureCamera = ({ onCapture, onClose }) => {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  useEffect(() => {
-    let stream = null;
-    const startCamera = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch (err) { console.error(err); }
-    };
-    startCamera();
-    return () => { if (stream) stream.getTracks().forEach(track => track.stop()); };
-  }, []);
-  const takePhoto = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    const context = canvas.getContext('2d');
-    const scale = 600 / video.videoWidth;
-    canvas.width = 600; canvas.height = video.videoHeight * scale;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    onCapture(canvas.toDataURL('image/jpeg', 0.7));
-  };
-  return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col">
-      <div className="relative flex-1 flex items-center justify-center overflow-hidden"><video ref={videoRef} autoPlay playsInline className="absolute w-full h-full object-cover" /><canvas ref={canvasRef} className="hidden" /><button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black/50 text-white rounded-full"><X size={24} /></button><div className="absolute bottom-8 left-0 right-0 flex justify-center"><button onClick={takePhoto} className="w-20 h-20 rounded-full border-4 border-white bg-white/20 backdrop-blur-sm"></button></div></div>
-    </div>
-  );
-};
-
-// 3. CALENDAR
+// 3. ROTA & CALENDAR
 const CalendarManager = ({ user, userRole }) => {
-  const [activeTab, setActiveTab] = useState('myrota');
-  const [appointments, setAppointments] = useState([]);
+  const [tab, setTab] = useState('myrota');
   const [shifts, setShifts] = useState([]);
-  const [allStaff, setAllStaff] = useState([]); 
-  const [showAddApt, setShowAddApt] = useState(false);
-  const [showAddShift, setShowAddShift] = useState(false);
-  const [viewingBlock, setViewingBlock] = useState(null);
+  const [staff, setStaff] = useState([]);
+  const [appts, setAppts] = useState([]);
+  
+  const [showAdd, setShowAdd] = useState(false);
+  const [showApt, setShowApt] = useState(false);
+  const [selectedBlock, setSelectedBlock] = useState(null);
 
-  const [shiftMode, setShiftMode] = useState('block');
-  const [newChild, setNewChild] = useState(''); const [newType, setNewType] = useState(''); const [newDate, setNewDate] = useState(''); const [newTime, setNewTime] = useState(''); const [newStaff, setNewStaff] = useState('');
-  const [shiftDate, setShiftDate] = useState(''); const [sleep1, setSleep1] = useState(''); const [sleep2, setSleep2] = useState(''); const [sleep3, setSleep3] = useState(''); const [dayStaff, setDayStaff] = useState('');
-  const [adhocStaff, setAdhocStaff] = useState(''); const [adhocStart, setAdhocStart] = useState(''); const [adhocEnd, setAdhocEnd] = useState('');
+  const [mode, setMode] = useState('block');
+  const [date, setDate] = useState('');
+  const [s1,setS1]=useState(''); const [s2,setS2]=useState(''); const [s3,setS3]=useState(''); const [d1,setD1]=useState('');
+  const [adName, setAdName]=useState(''); const [adStart, setAdStart]=useState(''); const [adEnd, setAdEnd]=useState('');
+  
+  const [aptChild, setAptChild] = useState(''); const [aptType, setAptType] = useState(''); const [aptDate, setAptDate] = useState(''); const [aptTime, setAptTime] = useState(''); const [aptEscort, setAptEscort] = useState('');
+  
+  const userName = getSafeName(user);
 
   useEffect(() => {
-    if (!user) return;
-    const qApt = query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_appointments'), orderBy('dateTime', 'asc'));
-    const unsubApt = onSnapshot(qApt, (s) => setAppointments(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const qRota = query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'), orderBy('date', 'asc'));
-    const unsubRota = onSnapshot(qRota, (s) => setShifts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const qStaff = query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_users'), orderBy('name', 'asc'));
-    const unsubStaff = onSnapshot(qStaff, (s) => setAllStaff(s.docs.map(d => d.data())));
-    return () => { unsubApt(); unsubRota(); unsubStaff(); };
-  }, [user]);
+    const u1 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'), orderBy('date')), s => setShifts(s.docs.map(d=>({id:d.id, ...d.data()}))));
+    const u2 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_users'), orderBy('name')), s => setStaff(s.docs.map(d=>d.data())));
+    const u3 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_appointments'), orderBy('dateTime')), s => setAppts(s.docs.map(d=>({id:d.id, ...d.data()}))));
+    return () => { u1(); u2(); u3(); };
+  }, []);
 
-  const handleAddAppointment = async (e) => {
-    e.preventDefault();
-    if (!newChild || !newDate) return;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_appointments'), { childName: newChild, type: newType, dateTime: new Date(`${newDate}T${newTime || '09:00'}`).toISOString(), displayDate: newDate, displayTime: newTime, staff: newStaff, createdBy: user.displayName });
-    setShowAddApt(false); setNewChild(''); setNewType(''); setNewDate('');
+  const saveBlock = async () => {
+    const b = writeBatch(db);
+    const id1 = doc(collection(db,'artifacts',appId,'public','data','parkside_rota_v3')).id;
+    const t1 = [{name:s1,type:'sleep',day:1},{name:s2,type:'sleep',day:1},{name:s3,type:'sleep',day:1},{name:d1,type:'day',day:1}].filter(x=>x.name);
+    const t2 = [{name:s1,type:'sleep',day:2},{name:s2,type:'sleep',day:2},{name:s3,type:'sleep',day:2},{name:d1,type:'day',day:2}].filter(x=>x.name);
+    b.set(doc(db,'artifacts',appId,'public','data','parkside_rota_v3',id1), {date, displayDate:new Date(date).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}), staff:t1, type:'block', dayNumber:1, blockId:id1});
+    const d2 = addDays(date,1);
+    b.set(doc(collection(db,'artifacts',appId,'public','data','parkside_rota_v3')), {date:d2, displayDate:new Date(d2).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'}), staff:t2, type:'block', dayNumber:2, blockId:id1});
+    await b.commit(); setShowAdd(false);
   };
 
-  const handleSaveRota = async (e) => {
-    e.preventDefault();
-    if (!shiftDate) return;
-
-    if (shiftMode === 'block') {
-        if (!sleep1 || !sleep2 || !sleep3 || !dayStaff) return;
-        const batch = writeBatch(db);
-        const day1Ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'));
-        const day1Staff = [{ name: sleep1, type: 'sleep', dayIndex: 1 }, { name: sleep2, type: 'sleep', dayIndex: 1 }, { name: sleep3, type: 'sleep', dayIndex: 1 }, { name: dayStaff, type: 'day', dayIndex: 1 }];
-        batch.set(day1Ref, { date: shiftDate, displayDate: new Date(shiftDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), staff: day1Staff, blockId: day1Ref.id, dayNumber: 1, type: 'block' });
-
-        const date2 = addDays(shiftDate, 1);
-        const day2Ref = doc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'));
-        const day2Staff = [{ name: sleep1, type: 'sleep', dayIndex: 2 }, { name: sleep2, type: 'sleep', dayIndex: 2 }, { name: sleep3, type: 'sleep', dayIndex: 2 }, { name: dayStaff, type: 'day', dayIndex: 2 }];
-        batch.set(day2Ref, { date: date2, displayDate: new Date(date2).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }), staff: day2Staff, blockId: day1Ref.id, dayNumber: 2, type: 'block' });
-        await batch.commit();
-    } else {
-        if (!adhocStaff || !adhocStart || !adhocEnd) return;
-        await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'), {
-            date: shiftDate,
-            displayDate: new Date(shiftDate).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }),
-            staff: [{ name: adhocStaff, type: 'adhoc', start: adhocStart, end: adhocEnd }],
-            type: 'adhoc'
-        });
-    }
-    setShowAddShift(false); setShiftDate(''); setSleep1(''); setSleep2(''); setSleep3(''); setDayStaff(''); setAdhocStaff('');
+  const saveAdhoc = async () => {
+     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'), {
+       date, displayDate: new Date(date).toLocaleDateString('en-GB', {weekday:'short', day:'numeric', month:'short'}),
+       staff: [{name: adName, type:'adhoc', start: adStart, end: adEnd}], type: 'adhoc'
+     });
+     setShowAdd(false);
   };
 
-  const handleDeleteShift = async (id) => { if (confirm('Remove shift?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3', id)); };
-  const myShifts = shifts.filter(shift => shift.staff.some(s => s.name.toLowerCase() === user.displayName?.toLowerCase()));
-  
-  const StaffSelect = ({ value, onChange, label }) => (
-    <div className="mb-2">
-        <select className="w-full p-2 border rounded-lg bg-white text-slate-700" value={value} onChange={e => onChange(e.target.value)}>
-            <option value="" disabled>{label}</option>
-            {allStaff.map(s => <option key={s.name} value={s.name}>{s.name}</option>)}
-        </select>
-    </div>
-  );
+  const saveApt = async () => {
+     await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_appointments'), {
+       childName: aptChild, type: aptType, displayDate: aptDate, displayTime: aptTime, staff: aptEscort, dateTime: new Date(`${aptDate}T${aptTime}`).toISOString()
+     });
+     setShowApt(false);
+  };
 
-  const getBlockDetails = (blockId) => shifts.filter(s => s.blockId === blockId).sort((a,b) => a.dayNumber - b.dayNumber);
+  const myShifts = shifts.filter(s => s.staff && s.staff.some(st => st.name && st.name.toLowerCase() === userName.toLowerCase()));
 
   return (
-    <div className="h-full flex flex-col pb-24">
-      {viewingBlock && (
-        <div className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-sm rounded-2xl overflow-hidden">
-                <div className="bg-[#65A30D] p-4 text-white flex justify-between items-center"><h3 className="font-bold text-lg">Your 48hr Block</h3><button onClick={() => setViewingBlock(null)}><X/></button></div>
-                <div className="p-4 space-y-4 bg-slate-50">
-                    {getBlockDetails(viewingBlock).map(day => (
-                        <div key={day.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-                            <div className="font-bold text-lg text-slate-800 mb-1">{day.displayDate}</div>
-                            <div className="text-xs uppercase font-bold text-[#65A30D] mb-3">Day {day.dayNumber} of 2</div>
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-sm text-slate-600"><Clock size={16}/>{day.dayNumber === 1 ? 'Start 08:00' : 'Full Day (End 08:30 Next Day)'}</div>
-                                <div className="flex items-center gap-2 text-sm text-slate-600"><Moon size={16}/> Sleep-in included</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-                <div className="p-4 bg-white border-t border-slate-100"><button onClick={() => setViewingBlock(null)} className="w-full py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Close</button></div>
-            </div>
-        </div>
-      )}
+    <div style={styles.main}>
+       <div style={styles.tabContainer}>
+          {['myrota','fullrota','diary'].map(t => (
+             <button key={t} onClick={()=>setTab(t)} style={tab===t ? {...styles.tabBtn, ...styles.tabActive} : styles.tabBtn}>{t==='myrota'?'My Shifts':t==='fullrota'?'Full Rota':'Diary'}</button>
+          ))}
+       </div>
 
-      <div className="bg-white p-4 pb-2 border-b border-slate-100 sticky top-0 z-10">
-        <h2 className="text-2xl font-bold text-slate-800 mb-4 flex items-center gap-2"><Calendar className="text-[#8B5E3C]" /> Rota & Diary</h2>
-        <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto">
-          <button onClick={() => setActiveTab('myrota')} className={`flex-1 whitespace-nowrap py-2 text-xs font-bold rounded-lg ${activeTab === 'myrota' ? 'bg-white text-[#65A30D] shadow-sm' : 'text-slate-500'}`}>My Shifts</button>
-          <button onClick={() => setActiveTab('fullrota')} className={`flex-1 whitespace-nowrap py-2 text-xs font-bold rounded-lg ${activeTab === 'fullrota' ? 'bg-white text-[#65A30D] shadow-sm' : 'text-slate-500'}`}>Full Rota</button>
-          <button onClick={() => setActiveTab('appointments')} className={`flex-1 whitespace-nowrap py-2 text-xs font-bold rounded-lg ${activeTab === 'appointments' ? 'bg-white text-[#65A30D] shadow-sm' : 'text-slate-500'}`}>Kids Appts</button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === 'myrota' && (
-          <div className="space-y-4">
-            <div className="bg-teal-50 p-4 rounded-xl border border-teal-100"><h3 className="font-bold text-teal-900 mb-1">Your Schedule</h3><p className="text-xs text-teal-700">Tap a block shift to see both days.</p></div>
-            {myShifts.length === 0 ? <div className="text-center py-10 text-slate-400">No upcoming shifts assigned.</div> : myShifts.map(shift => {
-                const myRole = shift.staff.find(s => s.name.toLowerCase() === user.displayName?.toLowerCase());
-                const isAdhoc = shift.type === 'adhoc';
+       {tab === 'myrota' && (
+          <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+             {myShifts.length === 0 && <div style={{textAlign:'center', padding:'40px', color:'#999'}}>No shifts assigned to you.</div>}
+             {myShifts.map(s => {
+                const me = s.staff.find(x=>x.name.toLowerCase()===userName.toLowerCase());
                 return (
-                  <div key={shift.id} onClick={() => shift.blockId && setViewingBlock(shift.blockId)} className={`bg-white p-4 rounded-xl border-l-4 shadow-sm mb-3 relative overflow-hidden cursor-pointer active:scale-[0.98] transition-transform ${isAdhoc ? 'border-blue-500' : 'border-[#65A30D]'}`}>
-                    <div className="flex justify-between items-start mb-2 relative z-10">
-                      <div><span className="font-bold text-lg text-slate-800">{shift.displayDate}</span><div className="text-xs font-bold text-slate-400 uppercase mt-1">{isAdhoc ? 'Extra Shift' : (myRole.dayIndex === 1 ? "Day 1 of 2 (Start)" : "Day 2 of 2 (Finish)")}</div></div>
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${isAdhoc ? 'bg-blue-100 text-blue-700' : (myRole?.type === 'sleep' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700')}`}>
-                        {isAdhoc ? 'ADHOC' : (myRole?.type === 'sleep' ? 'SLEEP IN' : 'LATE')}
-                      </span>
-                    </div>
-                    <div className="bg-slate-50 rounded-lg p-3 text-sm text-slate-600 flex items-start gap-3 mt-2 relative z-10">
-                        <Clock size={16} className="mt-0.5 shrink-0 text-teal-600" />
-                        <div>{isAdhoc ? (<span>{myRole.start} - {myRole.end}</span>) : (myRole?.type === 'sleep' ? (myRole.dayIndex === 1 ? <span className="font-bold">08:00 Start <ArrowRightCircle className="inline w-3 h-3"/> Sleep Over</span> : <span>Sleep Over <ArrowRightCircle className="inline w-3 h-3"/> Finish 08:30</span>) : (<span className="font-bold">08:00 - 22:30 (Late Finish)</span>))}</div>
-                    </div>
-                    {shift.blockId && <div className="absolute right-2 bottom-2"><Eye size={16} className="text-slate-300"/></div>}
-                  </div>
+                   <div key={s.id} onClick={()=>s.blockId && setSelectedBlock(s.blockId)} style={{...styles.card, borderLeft:'4px solid #65a30d', cursor:'pointer'}}>
+                      <div style={{display:'flex', justifyContent:'space-between', marginBottom:'16px'}}>
+                         <div>
+                            <div style={{fontSize:'22px', fontWeight:'800', color:'#1c1917'}}>{s.displayDate}</div>
+                            <div style={{fontSize:'12px', fontWeight:'700', color:'#a8a29e', textTransform:'uppercase', marginTop:'2px'}}>{s.type==='adhoc' ? 'Extra Shift' : (me.day===1 ? 'Day 1 (Start)' : 'Day 2 (Finish)')}</div>
+                         </div>
+                         <div style={{backgroundColor:me.type==='sleep'?'#f3e8ff':me.type==='adhoc'?'#dbeafe':'#ffedd5', color:me.type==='sleep'?'#7e22ce':me.type==='adhoc'?'#1d4ed8':'#c2410c', padding:'6px 12px', borderRadius:'10px', fontSize:'11px', fontWeight:'800', height:'fit-content'}}>{me.type==='sleep'?'SLEEP':'LATE'}</div>
+                      </div>
+                      <div style={{backgroundColor:'#f5f5f4', padding:'16px', borderRadius:'16px', fontSize:'14px', fontWeight:'600', color:'#57534e', display:'flex', alignItems:'center', gap:'10px'}}>
+                         <Clock size={18} className="text-[#65A30D]"/>
+                         {me.type==='adhoc' ? `${me.start} - ${me.end}` : (me.type==='sleep' ? (me.day===1?'Start 08:00 → Sleep':'Sleep → Finish 08:30') : 'Start 08:00 → Finish 22:30')}
+                      </div>
+                      {s.blockId && <div style={{position:'absolute', bottom:'24px', right:'24px', opacity:0.3}}><Eye size={20}/></div>}
+                   </div>
                 )
-              })}
+             })}
           </div>
-        )}
-        {activeTab === 'fullrota' && (
-          <div className="space-y-3">
-            {userRole === 'manager' && <button onClick={() => setShowAddShift(true)} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold shadow-lg mb-4 flex items-center justify-center gap-2"><CalendarDays size={18} /> Add Shifts</button>}
-            {shifts.map((shift) => (
-              <div key={shift.id} className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden relative">
-                <div className="bg-slate-50 p-3 border-b border-slate-100 flex justify-between items-center">
-                    <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-700">{shift.displayDate}</span>
-                        {shift.type === 'block' && <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 rounded">Day {shift.dayNumber}</span>}
-                        {shift.type === 'adhoc' && <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 rounded">ADHOC</span>}
-                    </div>
-                    {userRole === 'manager' && <button onClick={() => handleDeleteShift(shift.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>}
-                </div>
-                <div className="p-3 space-y-2"><div className="grid grid-cols-2 gap-2">{shift.staff.map((s, i) => (<div key={i} className={`flex items-center gap-2 p-2 rounded-lg border ${s.type === 'sleep' ? 'bg-purple-50 border-purple-100' : s.type === 'day' ? 'bg-orange-50 border-orange-100' : 'bg-blue-50 border-blue-100'}`}>{s.type === 'sleep' ? <Moon size={14} className="text-purple-500"/> : <Clock size={14} className="text-slate-500"/>}<span className="text-sm font-medium text-slate-900">{s.name} {s.type==='adhoc' && `(${s.start}-${s.end})`}</span></div>))}</div></div>
-              </div>
-            ))}
-          </div>
-        )}
-        {activeTab === 'appointments' && (
-          <div className="space-y-4">
-            {appointments.map(apt => (<div key={apt.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4"><div className="flex flex-col items-center justify-center px-3 bg-green-50 rounded-lg text-[#65A30D] border border-green-100"><span className="text-xs font-bold uppercase">{new Date(apt.displayDate).toLocaleString('default', { month: 'short' })}</span><span className="text-xl font-bold">{new Date(apt.displayDate).getDate()}</span></div><div className="flex-1"><div className="flex justify-between items-start"><h3 className="font-bold text-slate-800 text-lg">{apt.childName}</h3><span className="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs font-medium flex items-center gap-1"><Clock size={12} /> {apt.displayTime}</span></div><p className="text-[#8B5E3C] font-medium text-sm mb-1">{apt.type}</p>{apt.staff && <div className="flex items-center gap-1 text-xs text-slate-500"><Users size={12} /> Escort: {apt.staff}</div>}</div></div>))}
-            <button onClick={() => setShowAddApt(true)} className="w-full py-3 bg-[#65A30D] text-white rounded-xl font-bold shadow-lg hover:bg-[#4d7c0a] transition-all flex items-center justify-center gap-2"><Plus size={20} /> Add Appointment</button>
-          </div>
-        )}
-      </div>
+       )}
 
-      {showAddShift && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-4 border-2 border-purple-500 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between font-bold text-lg text-purple-900"><span>Add Shift</span><X onClick={() => setShowAddShift(false)} /></div>
-            <div className="flex bg-slate-100 p-1 rounded-xl">
-                <button onClick={() => setShiftMode('block')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${shiftMode === 'block' ? 'bg-white shadow text-purple-700' : 'text-slate-500'}`}>48hr Block</button>
-                <button onClick={() => setShiftMode('adhoc')} className={`flex-1 py-2 text-xs font-bold rounded-lg ${shiftMode === 'adhoc' ? 'bg-white shadow text-blue-700' : 'text-slate-500'}`}>Hourly</button>
+       {tab === 'fullrota' && (
+          <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+             {shifts.map(s => (
+                <div key={s.id} style={styles.card}>
+                   <div style={{display:'flex', justifyContent:'space-between', borderBottom:'1px solid #f5f5f4', paddingBottom:'16px', marginBottom:'16px'}}>
+                      <span style={{fontWeight:'800', fontSize:'18px'}}>{s.displayDate}</span>
+                      {userRole==='manager' && <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','parkside_rota_v3',s.id))} style={{border:'none', background:'transparent', color:'#ef4444'}}><Trash2 size={18}/></button>}
+                   </div>
+                   <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px'}}>
+                      {s.staff.map((st,i) => (
+                         <div key={i} style={{fontSize:'13px', fontWeight:'600', backgroundColor:st.type==='sleep'?'#f3e8ff':st.type==='day'?'#ffedd5':'#dbeafe', color:st.type==='sleep'?'#6b21a8':st.type==='day'?'#9a3412':'#1e40af', padding:'10px', borderRadius:'12px', display:'flex', alignItems:'center', gap:'8px'}}>
+                            {st.type==='sleep' ? <Moon size={14}/> : <Sun size={14}/>} {st.name}
+                         </div>
+                      ))}
+                   </div>
+                </div>
+             ))}
+             {userRole==='manager' && <button onClick={()=>setShowAdd(true)} style={styles.fab}><Plus size={32}/></button>}
+          </div>
+       )}
+
+       {tab === 'diary' && (
+          <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+             {appts.map(a => (
+                <div key={a.id} style={{...styles.card, display:'flex', gap:'16px', alignItems:'center', borderLeft:'4px solid #d97706'}}>
+                   <div style={{backgroundColor:'#fef3c7', color:'#d97706', width:'56px', height:'56px', borderRadius:'16px', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', fontWeight:'700', flexShrink:0}}>
+                      <span style={{fontSize:'11px', textTransform:'uppercase'}}>{new Date(a.displayDate).toLocaleString('default',{month:'short'})}</span>
+                      <span style={{fontSize:'20px', lineHeight:'1'}}>{new Date(a.displayDate).getDate()}</span>
+                   </div>
+                   <div>
+                      <div style={{fontSize:'18px', fontWeight:'800', color:'#1c1917'}}>{a.childName}</div>
+                      <div style={{fontSize:'13px', color:'#78716c', marginTop:'2px'}}>{a.displayTime} • {a.type}</div>
+                      {a.staff && <div style={{fontSize:'12px', color:'#a8a29e', marginTop:'2px'}}>Escort: {a.staff}</div>}
+                   </div>
+                </div>
+             ))}
+             <button onClick={()=>setShowApt(true)} style={styles.fab}><Plus size={32}/></button>
+          </div>
+       )}
+
+       {/* MODALS */}
+       {showAdd && (
+         <div style={{position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.6)', zIndex:200, display:'flex', alignItems:'flex-end'}}>
+            <div style={{backgroundColor:'white', width:'100%', borderRadius:'32px 32px 0 0', padding:'32px', maxHeight:'85vh', overflowY:'auto'}}>
+               <div style={{display:'flex', justifyContent:'space-between', marginBottom:'24px'}}>
+                  <h3 style={styles.h2}>Add Shift</h3>
+                  <button onClick={()=>setShowAdd(false)} style={{border:'none', background:'transparent'}}><X/></button>
+               </div>
+               <div style={{display:'flex', gap:'10px', marginBottom:'24px'}}>
+                  <button onClick={()=>setMode('block')} style={{...styles.btn, ...(mode==='block'?styles.btnPrimary:styles.btnSecondary)}}>48hr Block</button>
+                  <button onClick={()=>setMode('adhoc')} style={{...styles.btn, ...(mode==='adhoc'?styles.btnPrimary:styles.btnSecondary)}}>Hourly</button>
+               </div>
+               <label style={styles.label}>Date</label>
+               <input type="date" style={styles.input} value={date} onChange={e=>setDate(e.target.value)}/>
+               {mode === 'block' ? (
+                 <>
+                    <label style={styles.label}>Sleep-in Team (x3)</label>
+                    {[setS1,setS2,setS3].map((fn,i)=><select key={i} style={styles.select} onChange={e=>fn(e.target.value)}><option>Select Staff</option>{staff.map(u=><option>{u.name}</option>)}</select>)}
+                    <label style={styles.label}>Late Finish (x1)</label>
+                    <select style={styles.select} onChange={e=>setD1(e.target.value)}><option>Select Staff</option>{staff.map(u=><option>{u.name}</option>)}</select>
+                    <button onClick={saveBlock} style={{...styles.btn, ...styles.btnPrimary, marginTop:'16px'}}>Save Block</button>
+                 </>
+               ) : (
+                 <>
+                    <label style={styles.label}>Staff Member</label>
+                    <select style={styles.select} onChange={e=>setAdName(e.target.value)}><option>Select Staff</option>{staff.map(u=><option>{u.name}</option>)}</select>
+                    <div style={{display:'flex', gap:'10px'}}>
+                       <div style={{flex:1}}><label style={styles.label}>Start</label><input type="time" style={styles.input} value={adStart} onChange={e=>setAdStart(e.target.value)}/></div>
+                       <div style={{flex:1}}><label style={styles.label}>End</label><input type="time" style={styles.input} value={adEnd} onChange={e=>setAdEnd(e.target.value)}/></div>
+                    </div>
+                    <button onClick={saveAdhoc} style={{...styles.btn, ...styles.btnPrimary, marginTop:'16px'}}>Save Shift</button>
+                 </>
+               )}
             </div>
-            <div className="space-y-1"><label className="text-xs font-bold text-slate-500 uppercase">Date</label><input type="date" className="w-full p-3 border rounded-xl bg-slate-50 font-bold" value={shiftDate} onChange={e => setShiftDate(e.target.value)} /></div>
-            
-            {shiftMode === 'block' ? (
-                <div className="space-y-3">
-                    <div className="bg-purple-50 p-3 rounded-xl border border-purple-100"><h4 className="text-sm font-bold text-purple-900 flex items-center gap-2 mb-2"><Moon size={14}/> Sleep-in Staff (x3)</h4>
-                        <StaffSelect value={sleep1} onChange={setSleep1} label="Sleep Staff 1" />
-                        <StaffSelect value={sleep2} onChange={setSleep2} label="Sleep Staff 2" />
-                        <StaffSelect value={sleep3} onChange={setSleep3} label="Sleep Staff 3" />
+         </div>
+       )}
+       {showApt && (
+         <div style={{position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.6)', zIndex:200, display:'flex', alignItems:'flex-end'}}>
+            <div style={{backgroundColor:'white', width:'100%', borderRadius:'32px 32px 0 0', padding:'32px'}}>
+               <h3 style={styles.h2}>New Appointment</h3>
+               <input style={styles.input} placeholder="Child (Initials)" value={aptChild} onChange={e=>setAptChild(e.target.value)}/>
+               <input style={styles.input} placeholder="Type (e.g. Dentist)" value={aptType} onChange={e=>setAptType(e.target.value)}/>
+               <div style={{display:'flex', gap:'10px'}}>
+                  <input type="date" style={styles.input} value={aptDate} onChange={e=>setAptDate(e.target.value)}/>
+                  <input type="time" style={styles.input} value={aptTime} onChange={e=>setAptTime(e.target.value)}/>
+               </div>
+               <input style={styles.input} placeholder="Escort Staff" value={aptEscort} onChange={e=>setAptEscort(e.target.value)}/>
+               <button onClick={saveApt} style={{...styles.btn, ...styles.btnPrimary, marginTop:'16px'}}>Save</button>
+            </div>
+         </div>
+       )}
+       {selectedBlock && (
+        <div style={{position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.6)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px'}}>
+           <div style={{backgroundColor:'white', width:'100%', maxWidth:'350px', borderRadius:'32px', overflow:'hidden', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)'}}>
+              <div style={{backgroundColor:'#1c1917', padding:'24px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                 <h3 style={{fontSize:'20px', fontWeight:'800', color:'white'}}>48hr Overview</h3>
+                 <button onClick={()=>setSelectedBlock(null)} style={{border:'none', background:'transparent', color:'white'}}><X/></button>
+              </div>
+              <div style={{padding:'24px', backgroundColor:'#f5f5f4', display:'flex', flexDirection:'column', gap:'12px'}}>
+                 {shifts.filter(s=>s.blockId===selectedBlock).sort((a,b)=>a.dayNumber-b.dayNumber).map(day => (
+                    <div key={day.id} style={{backgroundColor:'white', padding:'20px', borderRadius:'20px', boxShadow:'0 4px 12px rgba(0,0,0,0.03)'}}>
+                       <div style={{display:'flex', justifyContent:'space-between', marginBottom:'8px'}}>
+                          <span style={{fontWeight:'800', fontSize:'18px', color:'#1c1917'}}>{day.displayDate}</span>
+                          <span style={{fontSize:'11px', fontWeight:'800', textTransform:'uppercase', color:'#65a30d', backgroundColor:'#ecfccb', padding:'4px 8px', borderRadius:'8px'}}>Day {day.dayNumber}</span>
+                       </div>
+                       <div style={{fontSize:'14px', color:'#57534e', display:'flex', alignItems:'center', gap:'8px'}}><Clock size={16}/>{day.dayNumber===1 ? '08:00 Start' : 'Finish 08:30 Next Day'}</div>
                     </div>
-                    <div className="bg-orange-50 p-3 rounded-xl border border-orange-100"><h4 className="text-sm font-bold text-orange-900 flex items-center gap-2 mb-2"><LogOut size={14}/> Late Staff (08:00 - 22:30)</h4>
-                        <StaffSelect value={dayStaff} onChange={setDayStaff} label="Late Staff 4" />
-                    </div>
-                </div>
-            ) : (
-                <div className="space-y-3 bg-blue-50 p-3 rounded-xl border border-blue-100">
-                    <h4 className="text-sm font-bold text-blue-900 mb-2">Ad-hoc Shift Details</h4>
-                    <StaffSelect value={adhocStaff} onChange={setAdhocStaff} label="Select Staff Member" />
-                    <div className="grid grid-cols-2 gap-2">
-                        <div><label className="text-[10px] text-slate-500 uppercase font-bold">Start</label><input type="time" className="w-full p-2 border rounded" value={adhocStart} onChange={e => setAdhocStart(e.target.value)} /></div>
-                        <div><label className="text-[10px] text-slate-500 uppercase font-bold">End</label><input type="time" className="w-full p-2 border rounded" value={adhocEnd} onChange={e => setAdhocEnd(e.target.value)} /></div>
-                    </div>
-                </div>
-            )}
-            
-            <button onClick={handleSaveRota} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold shadow-lg">Save to Rota</button>
-          </div>
+                 ))}
+              </div>
+           </div>
         </div>
-      )}
-
-      {showAddApt && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl p-4 space-y-4">
-            <div className="flex justify-between font-bold text-lg"><span>New Appointment</span><X onClick={() => setShowAddApt(false)} /></div>
-            <input type="text" placeholder="Child (Initials)" className="w-full p-2 border rounded" value={newChild} onChange={e => setNewChild(e.target.value)} />
-            <input type="text" placeholder="Type" className="w-full p-2 border rounded" value={newType} onChange={e => setNewType(e.target.value)} />
-            <div className="grid grid-cols-2 gap-2"><input type="date" className="w-full p-2 border rounded" value={newDate} onChange={e => setNewDate(e.target.value)} /><input type="time" className="w-full p-2 border rounded" value={newTime} onChange={e => setNewTime(e.target.value)} /></div>
-            <input type="text" placeholder="Escort" className="w-full p-2 border rounded" value={newStaff} onChange={e => setNewStaff(e.target.value)} />
-            <button onClick={handleAddAppointment} className="w-full py-3 bg-[#65A30D] text-white rounded font-bold">Save</button>
-          </div>
-        </div>
-      )}
+       )}
     </div>
   );
 };
 
-// 4. FEED
+// 4. HOUSE
+const HouseManager = ({ user, userRole }) => {
+  const [tab, setTab] = useState('oncall');
+  const [data, setData] = useState({ users:[], oncall:[], repairs:[], receipts:[] });
+  const [modals, setModals] = useState({});
+  const [form, setForm] = useState({});
+
+  useEffect(() => {
+    const unsubs = [
+      onSnapshot(query(collection(db,'artifacts',appId,'public','data','parkside_users'),orderBy('name')), s=>setData(p=>({...p,users:s.docs.map(d=>({id:d.id,...d.data()}))}))),
+      onSnapshot(query(collection(db,'artifacts',appId,'public','data','parkside_oncall'),orderBy('date')), s=>setData(p=>({...p,oncall:s.docs.map(d=>({id:d.id,...d.data()}))}))),
+      onSnapshot(query(collection(db,'artifacts',appId,'public','data','parkside_repairs'),orderBy('timestamp','desc')), s=>setData(p=>({...p,repairs:s.docs.map(d=>({id:d.id,...d.data()}))}))),
+      onSnapshot(query(collection(db,'artifacts',appId,'public','data','parkside_receipts'),orderBy('timestamp','desc')), s=>setData(p=>({...p,receipts:s.docs.map(d=>({id:d.id,...d.data()}))})))
+    ];
+    return () => unsubs.forEach(u=>u());
+  }, []);
+
+  const handleSubmit = async (type) => {
+    const col = type === 'oncall' ? 'parkside_oncall' : `parkside_${type}s`;
+    const payload = { timestamp: serverTimestamp(), ...form };
+    if(type==='repair') { payload.status='open'; payload.reportedBy=user.displayName; }
+    if(type==='receipt') { payload.staff=user.displayName; }
+    await addDoc(collection(db,'artifacts',appId,'public','data',col), payload);
+    setModals(p=>({...p, [type]:false})); setForm({});
+  };
+
+  return (
+    <div style={styles.section}>
+       <div style={{display:'flex', gap:'8px', overflowX:'auto', paddingBottom:'16px'}}>
+          {['oncall','repair','receipt',...(userRole==='manager'?['user']:[])].map(k => (
+             <button key={k} onClick={()=>setTab(k)} style={{padding:'12px 20px', borderRadius:'30px', fontSize:'14px', fontWeight:'700', border:'none', whiteSpace:'nowrap', backgroundColor:tab===k?'#1c1917':'white', color:tab===k?'white':'#78716c', boxShadow:tab===k?'0 8px 20px rgba(0,0,0,0.15)':'0 2px 8px rgba(0,0,0,0.05)'}}>
+                {k==='oncall'?'On Call':k==='repair'?'Repairs':k==='receipt'?'Cash':k==='user'?'Team':''}
+             </button>
+          ))}
+       </div>
+
+       {tab === 'oncall' && (
+          <div>
+             {userRole==='manager' && <button onClick={()=>setModals(p=>({...p,oncall:true}))} style={styles.fab}><Edit3 size={28}/></button>}
+             {data.oncall.map(oc => (
+                <div key={oc.id} style={{...styles.card, display:'flex', justifyContent:'space-between', alignItems:'center', borderLeft: oc.date===getTodayString() ? '4px solid #16a34a' : '1px solid #e5e5ea'}}>
+                   <div>
+                      {oc.date===getTodayString() && <span style={{fontSize:'10px', fontWeight:'800', color:'#16a34a', textTransform:'uppercase', display:'block', marginBottom:'4px'}}>ACTIVE NOW</span>}
+                      <div style={{fontSize:'12px', fontWeight:'700', color:'#999', textTransform:'uppercase'}}>{new Date(oc.date).toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})}</div>
+                      <div style={{fontSize:'18px', fontWeight:'800', marginTop:'2px', color:'#1c1917'}}>{oc.name}</div>
+                      <div style={{fontSize:'14px', fontWeight:'600', color:'#15803d', marginTop:'4px', display:'flex', alignItems:'center', gap:'4px'}}><Phone size={12}/> {oc.number}</div>
+                   </div>
+                   {userRole==='manager' && <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','parkside_oncall',oc.id))} style={{color:'#e5e5e5', background:'transparent', border:'none'}}><Trash2 size={18}/></button>}
+                </div>
+             ))}
+          </div>
+       )}
+
+       {tab === 'repair' && (
+          <div>
+             <button onClick={()=>setModals(p=>({...p,repair:true}))} style={styles.fab}><Plus size={32}/></button>
+             {data.repairs.map(r => (
+                <div key={r.id} style={{...styles.card, opacity:r.status==='fixed'?0.6:1, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                   <div style={{display:'flex', gap:'16px', alignItems:'center'}}>
+                      <div style={{width:'44px', height:'44px', borderRadius:'14px', backgroundColor:r.status==='fixed'?'#dcfce7':'#ffedd5', color:r.status==='fixed'?'#15803d':'#c2410c', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                         {r.status==='fixed' ? <CheckCircle size={20}/> : <Wrench size={20}/>}
+                      </div>
+                      <div><div style={{fontWeight:'700', fontSize:'16px', color:'#1c1917'}}>{r.item}</div><div style={{fontSize:'13px', color:'#a8a29e'}}>{r.location}</div></div>
+                   </div>
+                   <button onClick={()=>updateDoc(doc(db,'artifacts',appId,'public','data','parkside_repairs',r.id),{status:r.status==='open'?'fixed':'open'})} style={{fontSize:'12px', fontWeight:'700', padding:'8px 16px', backgroundColor:'#f4f4f5', borderRadius:'10px', border:'none', color:'#57534e'}}>
+                      {r.status==='open' ? 'Done' : 'Undo'}
+                   </button>
+                </div>
+             ))}
+          </div>
+       )}
+       
+       {tab === 'user' && (
+          <div>
+             <button onClick={()=>setModals(p=>({...p,user:true}))} style={styles.fab}><Plus size={32}/></button>
+             {data.users.map(u => (
+                <div key={u.id} style={{...styles.card, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+                   <div style={{display:'flex', alignItems:'center', gap:'16px'}}>
+                      <div style={{width:'44px', height:'44px', borderRadius:'22px', backgroundColor:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', color:'#71717a'}}>{u.name[0]}</div>
+                      <div><div style={{fontWeight:'700', color:'#1c1917', fontSize:'16px'}}>{u.name}</div><div style={{fontSize:'12px', color:'#a1a1aa', textTransform:'uppercase', fontWeight:'600'}}>{u.role}</div></div>
+                   </div>
+                   <button onClick={()=>deleteDoc(doc(db,'artifacts',appId,'public','data','parkside_users',u.id))} style={{color:'#ef4444', background:'transparent', border:'none'}}><Trash2 size={18}/></button>
+                </div>
+             ))}
+          </div>
+       )}
+       
+       {tab === 'receipt' && (
+          <div>
+             <button onClick={()=>setModals(p=>({...p,receipt:true}))} style={styles.fab}><Plus size={32}/></button>
+             {data.receipts.map(r => (
+                <div key={r.id} style={{...styles.card, display:'flex', gap:'16px', alignItems:'center'}}>
+                   <div style={{width:'56px', height:'56px', borderRadius:'16px', backgroundColor:'#dcfce7', color:'#15803d', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'800', fontSize:'18px'}}>£{r.amount}</div>
+                   <div><div style={{fontWeight:'700', fontSize:'16px', color:'#1c1917'}}>{r.store}</div><div style={{fontSize:'13px', color:'#a8a29e'}}>{r.category} • {r.staff}</div></div>
+                </div>
+             ))}
+          </div>
+       )}
+
+       {/* MODALS */}
+       {Object.keys(modals).map(k => modals[k] && (
+          <div key={k} style={{position:'fixed', inset:0, backgroundColor:'rgba(0,0,0,0.6)', zIndex:200, display:'flex', alignItems:'flex-end'}}>
+             <div style={{backgroundColor:'white', width:'100%', borderRadius:'32px 32px 0 0', padding:'32px'}}>
+                <h3 style={styles.h2}>{k==='user'?'Add Staff':k==='oncall'?'Add On Call':k==='repair'?'Report Issue':'Add Receipt'}</h3>
+                
+                {k==='user' && <><input style={styles.input} placeholder="Name" onChange={e=>setForm({...form,name:e.target.value})}/><input style={styles.input} placeholder="Password" onChange={e=>setForm({...form,password:e.target.value})}/><select style={styles.select} onChange={e=>setForm({...form,role:e.target.value})}><option value="staff">Staff</option><option value="manager">Manager</option></select></>}
+                
+                {k==='oncall' && <><input style={styles.input} type="date" onChange={e=>setForm({...form,date:e.target.value})}/><input style={styles.input} placeholder="Name" onChange={e=>setForm({...form,name:e.target.value})}/><input style={styles.input} placeholder="Phone" onChange={e=>setForm({...form,number:e.target.value})}/></>}
+                
+                {k==='repair' && <><input style={styles.input} placeholder="What's broken?" onChange={e=>setForm({...form,item:e.target.value})}/><input style={styles.input} placeholder="Location" onChange={e=>setForm({...form,location:e.target.value})}/></>}
+                
+                {k==='receipt' && <><input style={styles.input} type="number" placeholder="Amount £" onChange={e=>setForm({...form,amount:e.target.value})}/><input style={styles.input} placeholder="Store" onChange={e=>setForm({...form,store:e.target.value})}/><select style={styles.select} onChange={e=>setForm({...form,category:e.target.value})}><option>Food</option><option>Activities</option><option>Transport</option><option>Misc</option></select></>}
+
+                <button onClick={()=>handleSubmit(k)} style={{...styles.btn, ...styles.btnPrimary, marginTop:'16px'}}>Save</button>
+                <button onClick={()=>setModals(p=>({...p,[k]:false}))} style={{...styles.btn, marginTop:'10px', color:'#a8a29e', backgroundColor:'transparent'}}>Cancel</button>
+             </div>
+          </div>
+       ))}
+    </div>
+  );
+};
+
+// 5. FEED (Interactive)
 const FeedView = ({ user }) => {
   const [posts, setPosts] = useState([]);
-  const [showCamera, setShowCamera] = useState(false);
-  const [caption, setCaption] = useState('');
-  const [capturedImage, setCapturedImage] = useState(null);
-  const [isPosting, setIsPosting] = useState(false);
-  useEffect(() => { if (!user) return; const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_posts'), orderBy('timestamp', 'desc')); const unsubscribe = onSnapshot(q, (snapshot) => { setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); }); return () => unsubscribe(); }, [user]);
-  const handlePost = async () => { if ((!caption && !capturedImage) || isPosting) return; setIsPosting(true); try { await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_posts'), { author: user.displayName || 'Staff', authorId: user.uid, text: caption, image: capturedImage, timestamp: serverTimestamp(), likes: [] }); setCaption(''); setCapturedImage(null); } catch (err) { console.error(err); } finally { setIsPosting(false); } };
-  const handleLike = async (postId, likes) => { if (likes?.includes(user.uid)) return; await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'parkside_posts', postId), { likes: arrayUnion(user.uid) }); };
-  return (
-    <div className="pb-24">
-      {showCamera && <SecureCamera onCapture={(img) => { setCapturedImage(img); setShowCamera(false); }} onClose={() => setShowCamera(false)} />}
-      <div className="bg-white p-4 shadow-sm sticky top-0 z-10">
-        <div className="flex gap-3 mb-3"><div className="w-10 h-10 rounded-full bg-[#65A30D] flex items-center justify-center text-white font-bold">{user.displayName?.[0]}</div><input type="text" placeholder="Share a celebration..." className="flex-1 bg-slate-100 rounded-2xl p-3 outline-none text-sm" value={caption} onChange={(e) => setCaption(e.target.value)} /></div>
-        {capturedImage && <div className="relative mb-3 rounded-lg overflow-hidden border border-slate-200"><img src={capturedImage} alt="Capture" className="w-full max-h-60 object-cover" /><button onClick={() => setCapturedImage(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-full"><X size={16} /></button></div>}
-        <div className="flex justify-between"><button onClick={() => setShowCamera(true)} className="flex items-center gap-2 text-[#65A30D] font-medium px-3 py-2 rounded-lg hover:bg-green-50"><Camera size={20} /> Photo</button><button onClick={handlePost} disabled={(!caption && !capturedImage) || isPosting} className="bg-[#65A30D] text-white px-5 py-2 rounded-full font-medium text-sm disabled:opacity-50">{isPosting ? '...' : 'Post'}</button></div>
-      </div>
-      <div className="space-y-4 p-4">
-        {posts.map(post => (<div key={post.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden"><div className="p-4 flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 font-bold text-sm">{post.author[0]}</div><div><div className="font-bold text-slate-800">{post.author}</div><div className="text-xs text-slate-400">{post.timestamp ? formatTime(post.timestamp) : ''} · {post.timestamp ? formatDate(post.timestamp) : ''}</div></div></div>{post.text && <div className="px-4 pb-2 text-slate-700 whitespace-pre-wrap">{post.text}</div>}{post.image && <div className="w-full bg-black"><img src={post.image} alt="Post" className="w-full object-contain max-h-96" /></div>}<div className="p-3 border-t border-slate-50 flex items-center gap-4"><button onClick={() => handleLike(post.id, post.likes || [])} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg ${post.likes?.includes(user.uid) ? 'text-pink-500 bg-pink-50' : 'text-slate-500'}`}><Heart size={18} fill={post.likes?.includes(user.uid) ? "currentColor" : "none"} /><span className="text-sm font-medium">{post.likes?.length || 0}</span></button></div></div>))}
-      </div>
-    </div>
-  );
-};
+  const [text, setText] = useState('');
+  const [cam, setCam] = useState(false);
+  const [img, setImg] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const userName = getSafeName(user);
 
-// 5. HOUSE MANAGER (With Team Management)
-const HouseManager = ({ user, userRole }) => {
-  const [activeTab, setActiveTab] = useState('oncall'); 
-  const [repairs, setRepairs] = useState([]);
-  const [receipts, setReceipts] = useState([]);
-  const [onCallRota, setOnCallRota] = useState([]);
-  const [usersList, setUsersList] = useState([]);
-  
-  const [newRepair, setNewRepair] = useState('');
-  const [newLocation, setNewLocation] = useState('');
-  const [isAddingRepair, setIsAddingRepair] = useState(false);
+  useEffect(() => onSnapshot(query(collection(db,'artifacts',appId,'public','data','parkside_posts'),orderBy('timestamp','desc')), s=>setPosts(s.docs.map(d=>({id:d.id,...d.data()})))), []);
 
-  const [showReceiptCam, setShowReceiptCam] = useState(false);
-  const [receiptImg, setReceiptImg] = useState(null);
-  const [amount, setAmount] = useState('');
-  const [store, setStore] = useState('');
-  const [category, setCategory] = useState('Food');
-  const [isAddingReceipt, setIsAddingReceipt] = useState(false);
-
-  const [onCallDate, setOnCallDate] = useState('');
-  const [onCallName, setOnCallName] = useState('');
-  const [onCallNumber, setOnCallNumber] = useState('');
-  const [isAddingOnCall, setIsAddingOnCall] = useState(false);
-
-  // Team Management
-  const [newUserName, setNewUserName] = useState('');
-  const [newUserRole, setNewUserRole] = useState('staff');
-  const [newUserPassword, setNewUserPassword] = useState('');
-  const [isAddingUser, setIsAddingUser] = useState(false);
-
-  useEffect(() => {
-    if (!user) return;
-    const unsub1 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_repairs'), orderBy('timestamp', 'desc')), (s) => setRepairs(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsub2 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_receipts'), orderBy('timestamp', 'desc')), (s) => setReceipts(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsub3 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_oncall'), orderBy('date', 'asc')), (s) => setOnCallRota(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsub4 = onSnapshot(query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_users'), orderBy('name', 'asc')), (s) => setUsersList(s.docs.map(d => ({ id: d.id, ...d.data() }))));
-    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
-  }, [user]);
-
-  const handleAddRepair = async (e) => { e.preventDefault(); if (!newRepair) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_repairs'), { item: newRepair, location: newLocation, reportedBy: user.displayName, status: 'open', timestamp: serverTimestamp() }); setIsAddingRepair(false); setNewRepair(''); setNewLocation(''); };
-  const toggleRepairStatus = async (id, currentStatus) => { await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'parkside_repairs', id), { status: currentStatus === 'open' ? 'fixed' : 'open' }); };
-  const handleAddReceipt = async (e) => { e.preventDefault(); if (!amount || !receiptImg) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_receipts'), { amount, store, category, image: receiptImg, staff: user.displayName, timestamp: serverTimestamp() }); setIsAddingReceipt(false); setAmount(''); setStore(''); setReceiptImg(null); };
-  const handleAddOnCall = async (e) => { e.preventDefault(); if (!onCallDate || !onCallName) return; await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_oncall'), { date: onCallDate, name: onCallName, number: onCallNumber, createdBy: user.displayName, timestamp: serverTimestamp() }); setIsAddingOnCall(false); setOnCallDate(''); setOnCallName(''); setOnCallNumber(''); };
-  const deleteOnCall = async (id) => { if(confirm('Delete entry?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'parkside_oncall', id)); };
-  
-  const handleAddUser = async (e) => {
-    e.preventDefault();
-    if (!newUserName.trim() || !newUserPassword.trim()) return;
-    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_users'), { 
-        name: newUserName.trim(), 
-        role: newUserRole, 
-        password: newUserPassword.trim(),
-        createdAt: serverTimestamp() 
-    });
-    setIsAddingUser(false); setNewUserName(''); setNewUserRole('staff'); setNewUserPassword('');
+  const startCam = async () => {
+    setCam(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+    } catch(e) { alert("Camera error"); setCam(false); }
   };
-  const handleDeleteUser = async (id) => { if(confirm('Delete this user account?')) await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'parkside_users', id)); };
+
+  const takePhoto = () => {
+    if(!videoRef.current) return;
+    const canvas = canvasRef.current;
+    canvas.width = 600; canvas.height = videoRef.current.videoHeight * (600/videoRef.current.videoWidth);
+    canvas.getContext('2d').drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    setImg(canvas.toDataURL('image/jpeg', 0.6));
+    setCam(false);
+    videoRef.current.srcObject.getTracks().forEach(t=>t.stop());
+  };
+
+  const post = async () => {
+    if(!text && !img) return;
+    await addDoc(collection(db,'artifacts',appId,'public','data','parkside_posts'), { author:userName, text, image:img, timestamp:serverTimestamp(), likes:[], comments:[] });
+    setText(''); setImg(null);
+  };
+
+  const addReaction = async (id, emoji) => {
+     await updateDoc(doc(db,'artifacts',appId,'public','data','parkside_posts',id), {
+        comments: arrayUnion({ user: userName, text: emoji, time: Date.now() })
+     });
+  };
 
   return (
-    <div className="h-full flex flex-col pb-24">
-      {showReceiptCam && <SecureCamera onCapture={(img) => { setReceiptImg(img); setShowReceiptCam(false); }} onClose={() => setShowReceiptCam(false)} />}
-      <div className="bg-white p-4 pb-2 border-b border-slate-100 sticky top-0 z-10">
-        <div className="flex items-center gap-2 mb-4"><ParksideLogo size="small" showText={false} /><h2 className="text-2xl font-bold text-slate-800">House Hub</h2></div>
-        <div className="flex bg-slate-100 p-1 rounded-xl overflow-x-auto">
-          <button onClick={() => setActiveTab('oncall')} className={`flex-1 whitespace-nowrap py-2 px-3 text-xs font-bold rounded-lg ${activeTab === 'oncall' ? 'bg-white text-[#65A30D] shadow-sm' : 'text-slate-500'}`}>On Call</button>
-          <button onClick={() => setActiveTab('pettycash')} className={`flex-1 whitespace-nowrap py-2 px-3 text-xs font-bold rounded-lg ${activeTab === 'pettycash' ? 'bg-white text-[#65A30D] shadow-sm' : 'text-slate-500'}`}>Cash</button>
-          <button onClick={() => setActiveTab('repairs')} className={`flex-1 whitespace-nowrap py-2 px-3 text-xs font-bold rounded-lg ${activeTab === 'repairs' ? 'bg-white text-[#65A30D] shadow-sm' : 'text-slate-500'}`}>Repairs</button>
-          {userRole === 'manager' && <button onClick={() => setActiveTab('team')} className={`flex-1 whitespace-nowrap py-2 px-3 text-xs font-bold rounded-lg ${activeTab === 'team' ? 'bg-purple-600 text-white shadow-sm' : 'text-purple-600'}`}>Team</button>}
-        </div>
-      </div>
-      <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === 'team' && userRole === 'manager' && (
-            <div className="space-y-4">
-                <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl"><h3 className="font-bold text-purple-900 mb-1">Staff Accounts</h3><p className="text-xs text-purple-700">Create secure accounts for your team.</p></div>
-                {!isAddingUser ? ( <button onClick={() => setIsAddingUser(true)} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><UserPlus size={20}/> Add New Staff</button>) : (
-                    <form onSubmit={handleAddUser} className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm space-y-3">
-                        <h4 className="font-bold text-purple-800">Create Account</h4>
-                        <input type="text" placeholder="Full Name" className="w-full p-2 border rounded" value={newUserName} onChange={e => setNewUserName(e.target.value)} required />
-                        <input type="text" placeholder="Assign Password" className="w-full p-2 border rounded" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} required />
-                        <select className="w-full p-2 border rounded" value={newUserRole} onChange={e => setNewUserRole(e.target.value)}><option value="staff">Care Staff</option><option value="manager">Manager</option></select>
-                        <div className="flex gap-2"><button type="button" onClick={() => setIsAddingUser(false)} className="flex-1 py-2 bg-slate-200 rounded font-bold">Cancel</button><button type="submit" className="flex-1 py-2 bg-purple-600 text-white rounded font-bold">Create User</button></div>
-                    </form>
-                )}
-                <div className="space-y-2">{usersList.map(u => (<div key={u.id} className="flex items-center justify-between bg-white p-3 rounded-xl border border-slate-100"><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${u.role === 'manager' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>{u.name[0]}</div><div><div className="font-bold text-slate-800">{u.name}</div><div className="text-xs text-slate-400 uppercase">{u.role}</div></div></div><button onClick={() => handleDeleteUser(u.id)} className="text-slate-300 hover:text-red-500"><UserX size={18} /></button></div>))}</div>
-            </div>
-        )}
-        {activeTab === 'oncall' && (
-          <div className="space-y-4">
-            <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl"><h3 className="font-bold text-purple-900 mb-1">On Call Protocol</h3><p className="text-xs text-purple-700">Managers take turns for on-call duties.</p></div>
-            {userRole === 'manager' && (!isAddingOnCall ? <button onClick={() => setIsAddingOnCall(true)} className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><Edit3 size={20}/> Add to Rota</button> : <form onSubmit={handleAddOnCall} className="bg-white p-4 rounded-xl border border-purple-200 shadow-sm space-y-3"><input type="date" required className="w-full p-2 border rounded" value={onCallDate} onChange={e => setOnCallDate(e.target.value)} /><input type="text" placeholder="Manager Name" required className="w-full p-2 border rounded" value={onCallName} onChange={e => setOnCallName(e.target.value)} /><input type="tel" placeholder="Contact Number" required className="w-full p-2 border rounded" value={onCallNumber} onChange={e => setOnCallNumber(e.target.value)} /><div className="flex gap-2"><button type="button" onClick={() => setIsAddingOnCall(false)} className="flex-1 py-2 bg-slate-200 rounded font-bold">Cancel</button><button type="submit" className="flex-1 py-2 bg-purple-600 text-white rounded font-bold">Save</button></div></form>)}
-            <div className="space-y-3">{onCallRota.map(shift => { const isToday = shift.date === getTodayString(); return (<div key={shift.id} className={`p-4 rounded-xl border shadow-sm flex justify-between items-center ${isToday ? 'bg-green-50 border-green-200 ring-1 ring-green-300' : 'bg-white border-slate-100'}`}><div>{isToday && <span className="bg-[#65A30D] text-white text-[10px] font-bold px-2 py-0.5 rounded-full mb-1 inline-block">ACTIVE NOW</span>}<div className="text-xs font-bold text-slate-400 uppercase">{new Date(shift.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</div><div className="font-bold text-slate-800 text-lg">{shift.name}</div><a href={`tel:${shift.number}`} className="text-teal-600 font-medium text-sm flex items-center gap-1 mt-1"><Phone size={14}/> {shift.number}</a></div>{userRole === 'manager' && <button onClick={() => deleteOnCall(shift.id)} className="text-slate-300 hover:text-red-400 p-2"><Trash2 size={18}/></button>}</div>) })}</div>
+    <div style={styles.section}>
+       {cam && (
+          <div style={{position:'fixed', inset:0, backgroundColor:'black', zIndex:300, display:'flex', flexDirection:'column'}}>
+             <video ref={videoRef} autoPlay playsInline style={{flex:1, objectFit:'cover'}}/>
+             <canvas ref={canvasRef} style={{display:'none'}}/>
+             <div style={{padding:'30px', display:'flex', justifyContent:'space-between', alignItems:'center', background:'black'}}>
+                <button onClick={()=>{setCam(false); videoRef.current.srcObject.getTracks().forEach(t=>t.stop())}} style={{color:'white', fontWeight:'700'}}>Cancel</button>
+                <button onClick={takePhoto} style={{width:'70px', height:'70px', borderRadius:'35px', border:'5px solid white', backgroundColor:'rgba(255,255,255,0.5)'}}></button>
+                <div style={{width:'50px'}}></div>
+             </div>
           </div>
-        )}
-        {activeTab === 'repairs' && (
-          <div className="space-y-3">
-            <button onClick={() => setIsAddingRepair(true)} className="w-full py-3 border-2 border-dashed border-green-200 text-[#65A30D] rounded-xl font-bold hover:bg-green-50 flex items-center justify-center gap-2"><Plus size={20} /> Report Broken Item</button>
-            {isAddingRepair && (<form onSubmit={handleAddRepair} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-3"><input type="text" placeholder="What's broken?" className="w-full p-2 border rounded" value={newRepair} onChange={e => setNewRepair(e.target.value)} /><input type="text" placeholder="Location" className="w-full p-2 border rounded" value={newLocation} onChange={e => setNewLocation(e.target.value)} /><div className="flex gap-2"><button type="button" onClick={() => setIsAddingRepair(false)} className="flex-1 py-2 bg-slate-200 rounded font-bold">Cancel</button><button type="submit" className="flex-1 py-2 bg-[#65A30D] text-white rounded font-bold">Report</button></div></form>)}
-            {repairs.map(item => (<div key={item.id} className={`bg-white p-4 rounded-xl border shadow-sm flex justify-between items-center ${item.status === 'fixed' ? 'opacity-60' : 'border-orange-200'}`}><div className="flex items-start gap-3"><div className={`p-2 rounded-full ${item.status === 'fixed' ? 'bg-green-100 text-[#65A30D]' : 'bg-orange-100 text-orange-600'}`}>{item.status === 'fixed' ? <CheckCircle size={20} /> : <Wrench size={20} />}</div><div><h4 className={`font-bold ${item.status === 'fixed' ? 'text-slate-500 line-through' : 'text-slate-800'}`}>{item.item}</h4><div className="text-xs text-slate-400">{item.location}</div></div></div><button onClick={() => toggleRepairStatus(item.id, item.status)} className={`text-xs font-bold px-3 py-1 rounded-full ${item.status === 'fixed' ? 'bg-slate-100 text-slate-500' : 'bg-orange-100 text-orange-600'}`}>{item.status === 'fixed' ? 'Fixed' : 'Open'}</button></div>))}
+       )}
+
+       <div style={styles.card}>
+          <div style={{display:'flex', gap:'12px'}}>
+             <div style={{width:'40px', height:'40px', borderRadius:'14px', backgroundColor:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', color:'#71717a'}}>{userName[0]}</div>
+             <textarea style={{...styles.input, height:'80px', resize:'none', marginBottom:0, backgroundColor:'transparent', border:'none', padding:'0'}} placeholder="Share an update..." value={text} onChange={e=>setText(e.target.value)}></textarea>
           </div>
-        )}
-        {activeTab === 'pettycash' && (
-          <div className="space-y-3">
-             {!isAddingReceipt ? <button onClick={() => setIsAddingReceipt(true)} className="w-full py-3 bg-green-600 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-2"><Receipt size={20} /> Add Receipt</button> : <form onSubmit={handleAddReceipt} className="bg-white p-4 rounded-xl border border-green-200 shadow-sm space-y-3"><div className="bg-slate-50 p-3 rounded-lg flex flex-col items-center justify-center border-2 border-dashed border-slate-300">{receiptImg ? <div className="relative w-full"><img src={receiptImg} className="w-full h-32 object-cover rounded-lg" /><button type="button" onClick={() => setReceiptImg(null)} className="absolute top-1 right-1 bg-black/50 text-white p-1 rounded-full"><X size={14}/></button></div> : <button type="button" onClick={() => setShowReceiptCam(true)} className="flex flex-col items-center gap-2 text-slate-500 py-4"><Camera size={24} className="text-[#65A30D]"/><span className="text-xs font-bold">Snap Receipt</span></button>}</div><div className="grid grid-cols-2 gap-2"><input type="number" step="0.01" required className="w-full p-2 border rounded" placeholder="£ Amount" value={amount} onChange={e => setAmount(e.target.value)} /><input type="text" placeholder="Store" required className="w-full p-2 border rounded" value={store} onChange={e => setStore(e.target.value)} /></div><select className="w-full p-2 border rounded" value={category} onChange={e => setCategory(e.target.value)}><option>Food</option><option>Activities</option><option>Clothing</option><option>Transport</option></select><div className="flex gap-2 mt-2"><button type="button" onClick={() => setIsAddingReceipt(false)} className="flex-1 py-2 bg-slate-200 rounded font-bold">Cancel</button><button type="submit" disabled={!receiptImg} className="flex-1 py-2 bg-green-600 text-white rounded font-bold disabled:opacity-50">Submit</button></div></form>}
-             {receipts.map(item => (<div key={item.id} className="bg-white p-3 rounded-xl border border-slate-100 shadow-sm flex gap-3 items-center"><div className="w-12 h-12 bg-green-50 rounded-lg flex items-center justify-center text-green-700 shrink-0 font-bold border border-green-100">£{item.amount}</div><div className="flex-1 min-w-0"><h4 className="font-bold text-slate-700 truncate">{item.store}</h4><div className="text-xs text-slate-500">{item.category}</div></div>{item.image && <img src={item.image} className="w-10 h-10 object-cover rounded bg-slate-200 border border-slate-200" />}</div>))}
+          {img && <div style={{margin:'12px 0', height:'150px', borderRadius:'12px', overflow:'hidden', position:'relative'}}><img src={img} style={{width:'100%', height:'100%', objectFit:'cover'}}/><button onClick={()=>setImg(null)} style={{position:'absolute', top:'8px', right:'8px', backgroundColor:'rgba(0,0,0,0.5)', color:'white', borderRadius:'12px', padding:'4px'}}><X size={16}/></button></div>}
+          <div style={{display:'flex', justifyContent:'space-between', marginTop:'12px', borderTop:`1px solid ${theme.border}`, paddingTop:'12px'}}>
+             <button onClick={startCam} style={{border:'none', background:'transparent', color:theme.primary, fontWeight:'700', fontSize:'13px', display:'flex', alignItems:'center', gap:'6px'}}><Camera size={18}/> Add Photo</button>
+             <button onClick={post} style={{backgroundColor:theme.text, color:'white', padding:'8px 24px', borderRadius:'12px', border:'none', fontWeight:'700'}}>Post</button>
           </div>
-        )}
-      </div>
+       </div>
+
+       {posts.map(p => (
+          <div key={p.id} style={{...styles.card, padding:'0', overflow:'hidden'}}>
+             <div style={{padding:'16px', display:'flex', gap:'12px', alignItems:'center'}}>
+                <div style={{width:'36px', height:'36px', borderRadius:'12px', backgroundColor:'#f4f4f5', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', color:'#71717a'}}>{p.author[0]}</div>
+                <div><div style={{fontWeight:'700', color:'#1c1917'}}>{p.author}</div><div style={{fontSize:'11px', color:'#a8a29e'}}>{p.timestamp ? new Date(p.timestamp.toDate()).toLocaleString() : 'Just now'}</div></div>
+             </div>
+             {p.text && <div style={{padding:'0 16px 16px 16px', color:'#44403c', fontSize:'15px', lineHeight:'1.5'}}>{p.text}</div>}
+             {p.image && <img src={p.image} style={{width:'100%', height:'auto', display:'block'}}/>}
+             
+             {/* Comments / Reactions */}
+             <div style={{padding:'12px 16px', borderTop:`1px solid ${theme.border}`}}>
+                 <div style={{display:'flex', gap:'8px', marginBottom:'12px', overflowX:'auto'}}>
+                    {['👍','❤️','🎉','👏'].map(e => (
+                       <button key={e} onClick={()=>addReaction(p.id, e)} style={{fontSize:'18px', border:'none', background:'#f5f5f4', borderRadius:'20px', padding:'6px 12px'}}>{e}</button>
+                    ))}
+                 </div>
+                 {p.comments && p.comments.length > 0 && (
+                    <div style={{backgroundColor:'#f9fafb', padding:'12px', borderRadius:'12px', marginTop:'8px'}}>
+                       {p.comments.map((c,i) => (
+                          <div key={i} style={{fontSize:'13px', marginBottom:'4px'}}>
+                             <span style={{fontWeight:'700', marginRight:'6px'}}>{c.user}:</span>{c.text}
+                          </div>
+                       ))}
+                    </div>
+                 )}
+             </div>
+          </div>
+       ))}
     </div>
   );
 };
 
-// 6. DASHBOARD
-const Dashboard = ({ user, userRole, onNavigate }) => {
-  const [todayOnCall, setTodayOnCall] = useState(null);
-  const [nextShift, setNextShift] = useState(null);
-  useEffect(() => {
-    if (!user) return;
-    const today = getTodayString();
-    const qOnCall = query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_oncall'), where('date', '==', today));
-    const unsubOnCall = onSnapshot(qOnCall, (s) => { if (!s.empty) setTodayOnCall(s.docs[0].data()); else setTodayOnCall(null); });
-    const qShifts = query(collection(db, 'artifacts', appId, 'public', 'data', 'parkside_rota_v3'), where('date', '>=', today), orderBy('date', 'asc'));
-    const unsubShifts = onSnapshot(qShifts, (s) => { const allShifts = s.docs.map(d => ({ id: d.id, ...d.data() })); const myNext = allShifts.find(shift => shift.staff.some(st => st.name.toLowerCase() === user.displayName?.toLowerCase())); setNextShift(myNext || null); });
-    return () => { unsubOnCall(); unsubShifts(); };
-  }, [user]);
-
-  return (
-    <div className="p-4 pb-24 space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-slate-800">Hello, {user.displayName?.split(' ')[0]} 👋</h1><p className="text-slate-500">{userRole === 'manager' ? 'Team Leader' : 'Care Staff'} @ Parkside</p></div>
-        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${userRole === 'manager' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-[#65A30D]'}`}>{userRole === 'manager' ? <Briefcase size={20} /> : <User size={20} />}</div>
-      </div>
-      <div className="bg-white rounded-2xl p-4 border border-purple-100 shadow-sm ring-1 ring-purple-50"><h3 className="text-xs font-bold text-purple-500 uppercase tracking-wider mb-3 flex items-center gap-2"><PhoneCall size={14} /> Who is On Call Today?</h3>{todayOnCall ? (<div className="flex items-center justify-between"><div><div className="text-xl font-bold text-slate-800">{todayOnCall.name}</div><div className="text-slate-500 text-sm">Until 9:00 AM tomorrow</div></div><a href={`tel:${todayOnCall.number}`} className="bg-purple-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 shadow-md active:scale-95 transition-transform"><Phone size={18} /> Call</a></div>) : <div className="text-slate-400 text-sm italic py-2">No on-call manager assigned today.</div>}</div>
-      {nextShift ? (<div className="bg-gradient-to-br from-[#65A30D] to-[#3f6212] rounded-2xl p-5 text-white shadow-lg relative overflow-hidden"><ArrowRightCircle className="absolute top-3 right-3 opacity-20 w-24 h-24" /><div className="flex items-center justify-between mb-2 relative z-10"><div className="flex items-center gap-2 opacity-90"><User size={16} /><span className="text-sm font-medium uppercase tracking-wide">Your Next Shift</span></div><span className="bg-white/20 text-white text-xs px-2 py-1 rounded font-bold">{nextShift.date === getTodayString() ? 'TODAY' : 'UPCOMING'}</span></div><div className="text-2xl font-bold relative z-10">{new Date(nextShift.date).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}</div><div className="mt-2 opacity-90 text-sm flex items-center gap-2 relative z-10"><Clock size={14} />{(() => { const myRole = nextShift.staff.find(s => s.name.toLowerCase() === user.displayName?.toLowerCase()); if (myRole?.type === 'adhoc') return `${myRole.start} - ${myRole.end}`; if (myRole?.type !== 'sleep') return "08:00 - 22:30 (Late Finish)"; return myRole.dayIndex === 1 ? "Day 1: 08:00 Start" : "Day 2: 08:30 Finish Tomorrow"; })()}</div></div>) : (<div className="bg-gradient-to-br from-[#65A30D] to-[#3f6212] rounded-2xl p-5 text-white shadow-lg"><div className="flex items-center gap-2 mb-3 opacity-90"><Shield size={16} /><span className="text-sm font-medium uppercase tracking-wide">Handover Summary</span></div><p className="text-lg font-medium leading-relaxed">No upcoming shifts found on the rota. Enjoy your days off!</p></div>)}
-      <div className="grid grid-cols-2 gap-3"><button onClick={() => onNavigate('calendar')} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 hover:bg-slate-50 transition-colors"><div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600"><Clock size={20} /></div><span className="font-medium text-sm text-slate-700">Appointments</span></button><button onClick={() => onNavigate('house')} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex flex-col items-center gap-2 hover:bg-slate-50 transition-colors"><div className="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-orange-600"><Wrench size={20} /></div><span className="font-medium text-sm text-slate-700">House / On Call</span></button></div>
-    </div>
-  );
-};
-
-// --- MAIN APP ---
+// --- APP SHELL ---
 export default function ParksideApp() {
-  const [firebaseUser, setFirebaseUser] = useState(null);
-  const [isAppLoggedIn, setIsAppLoggedIn] = useState(false);
-  const [userRole, setUserRole] = useState('staff');
-  const [currentView, setCurrentView] = useState('dashboard'); 
+  const [user, setUser] = useState(null);
+  const [role, setRole] = useState('staff');
+  const [view, setView] = useState('dashboard');
+  const [loggedIn, setLoggedIn] = useState(false);
 
   useEffect(() => {
-     const initAuth = async () => {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-           await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-           await signInAnonymously(auth);
-        }
-     };
-     initAuth();
-     onAuthStateChanged(auth, setFirebaseUser);
+    const init = async () => {
+       if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) await signInWithCustomToken(auth, __initial_auth_token);
+       else await signInAnonymously(auth);
+    };
+    init();
+    onAuthStateChanged(auth, setUser);
   }, []);
 
-  const handleLogout = () => {
-      setIsAppLoggedIn(false);
-  };
-
-  if (!firebaseUser) {
-      return <div className="h-screen w-full flex items-center justify-center bg-slate-900 text-[#65A30D]"><RefreshCw className="animate-spin" size={32}/></div>;
-  }
-
-  if (!isAppLoggedIn) {
-      return <LoginScreen firebaseUser={firebaseUser} onLogin={(role) => { setUserRole(role); setIsAppLoggedIn(true); }} />;
-  }
+  if (!user) return <div style={{height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', backgroundColor:theme.bg}}><RefreshCw className="animate-spin" color={theme.primary}/></div>;
+  if (!loggedIn) return <LoginScreen firebaseUser={user} onLogin={r=>{setRole(r);setLoggedIn(true);}} />;
 
   return (
-    <div className="max-w-md mx-auto h-screen bg-slate-50 flex flex-col relative overflow-hidden font-sans">
-      <header className="bg-white border-b border-slate-200 px-4 py-3 flex justify-between items-center sticky top-0 z-20"><div className="flex items-center gap-2"><ParksideLogo size="small" /></div><button onClick={handleLogout} className="p-2 text-slate-400 hover:text-red-500 transition-colors"><LogOut size={20} /></button></header>
-      <main className="flex-1 overflow-y-auto scrollbar-hide">
-        {currentView === 'dashboard' && <Dashboard user={firebaseUser} userRole={userRole} onNavigate={setCurrentView} />}
-        {currentView === 'calendar' && <CalendarManager user={firebaseUser} userRole={userRole} />}
-        {currentView === 'feed' && <FeedView user={firebaseUser} />}
-        {currentView === 'house' && <HouseManager user={firebaseUser} userRole={userRole} />}
-      </main>
-      <nav className="bg-white border-t border-slate-200 px-6 py-3 flex justify-between items-center sticky bottom-0 z-30 pb-6 lg:pb-3"><button onClick={() => setCurrentView('dashboard')} className={`flex flex-col items-center gap-1 ${currentView === 'dashboard' ? 'text-[#65A30D]' : 'text-slate-400'}`}><Home size={24} strokeWidth={currentView==='dashboard'?2.5:2} /><span className="text-[10px] font-bold">Home</span></button><button onClick={() => setCurrentView('calendar')} className={`flex flex-col items-center gap-1 ${currentView === 'calendar' ? 'text-[#65A30D]' : 'text-slate-400'}`}><Calendar size={24} strokeWidth={currentView==='calendar'?2.5:2} /><span className="text-[10px] font-bold">Rota</span></button><button onClick={() => setCurrentView('house')} className={`flex flex-col items-center gap-1 ${currentView === 'house' ? 'text-[#65A30D]' : 'text-slate-400'}`}><Wrench size={24} strokeWidth={currentView==='house'?2.5:2} /><span className="text-[10px] font-bold">House</span></button><button onClick={() => setCurrentView('feed')} className={`flex flex-col items-center gap-1 ${currentView === 'feed' ? 'text-[#65A30D]' : 'text-slate-400'}`}><MessageSquare size={24} strokeWidth={currentView==='feed'?2.5:2} /><span className="text-[10px] font-bold">Log</span></button></nav>
+    <div style={styles.app}>
+       <div style={styles.header}>
+          <ParksideLogo />
+          <button onClick={()=>setLoggedIn(false)} style={{width:'36px', height:'36px', borderRadius:'12px', backgroundColor:'#fee2e2', border:'none', display:'flex', alignItems:'center', justifyContent:'center', color:'#ef4444'}}><LogOut size={18}/></button>
+       </div>
+
+       {view === 'dashboard' && <Dashboard user={user} onNavigate={setView} />}
+       {view === 'calendar' && <CalendarManager user={user} userRole={role} />}
+       {view === 'house' && <HouseManager user={user} userRole={role} />}
+       {view === 'feed' && <FeedView user={user} />}
+
+       <BottomNav active={view} onChange={setView} />
     </div>
   );
 }
